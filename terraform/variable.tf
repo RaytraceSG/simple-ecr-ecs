@@ -19,5 +19,5 @@
 variable "ecr_repo_name" {
   description = "ECR Repo name"
   type        = string
-  default     = "azmi1-flask-app"
+  default     = "azmi1-ecr-ecs-flask-app"
 }
