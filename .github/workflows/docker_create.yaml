@@ -1,0 +1,70 @@
+name: Docker image build and publish
+run-name: Running Docker image build and publish by ${{ github.actor }}
+
+env:
+  ECR_REPOSITORY: azmi1-ecr-ecs-flask-app
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - files/**
+
+jobs:
+  Get-Tag:
+    runs-on: ubuntu-latest
+    outputs:
+      LATEST_TAG: ${{ steps.get_latest_tag.outputs.LATEST_TAG }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Fetch All Tags
+        run: git fetch --tags
+
+      - name: Get Latest Tag
+        id: get_latest_tag
+        run: |
+          echo "LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)" >> "$GITHUB_OUTPUT"
+          echo "LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)"
+
+      - name: Output Latest Tag
+        run: echo "The latest tag is ${{ steps.get_latest_tag.outputs.LATEST_TAG }}"
+
+  Docker-Image-Create-And-Publish:
+    runs-on: ubuntu-latest
+    outputs:
+      ECR_REGISTRY: ${{ steps.build-publish.outputs.ECR_REGISTRY }}
+    needs: Get-Tag
+    defaults:
+      run:
+        shell: bash
+        working-directory: ./files
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push docker image to Amazon ECR Public
+        id: build-publish
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ needs.Get-Tag.outputs.LATEST_TAG }}.${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "IMAGE $IMAGE_TAG is pushed to $ECR_REGISTRY/$ECR_REPOSITORY"
+          echo "full_image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          echo ECR_REGISTRY=$ECR_REGISTRY >> "$GITHUB_OUTPUT"
